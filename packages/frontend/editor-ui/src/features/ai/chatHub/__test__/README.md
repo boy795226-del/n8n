@@ -41,6 +41,7 @@ Your mission is to bring code coverage under the chatHub folder to above 95%.
 	await user.click(editButtons[0]); // Which edit button? Not clear
 	```
 - **Improving product code for testability**: If tests require `querySelector` or are difficult to write due to missing accessible selectors, consider modifying the product code to add better accessibility features (e.g., ARIA labels, roles, or test IDs). This improves both testability and accessibility.
+- **Don't assert `.toBeInTheDocument()` for `findBy*` queries** - `findBy*` already waits for elements and throws if not found, making the assertion redundant
 - Do assert:
 	- What is displayed in UI
 	- API requests for mutations (create, update, etc.)
@@ -53,13 +54,16 @@ Your mission is to bring code coverage under the chatHub folder to above 95%.
 - Always wait for UI cues (e.g., `await findByRole()`, `await findByText()`)
 - Never use arbitrary timeouts like `setTimeout()` or `new Promise(resolve => setTimeout(resolve, 200))`
 - Wait for the last message text with `await findByText(...)`, then query all messages with `queryAllByTestId(...)`
+- **Assert UI changes before API arguments** - wait for UI result first, then verify API was called correctly (no `waitFor` needed for synchronous mocks)
 
 ### Variables and code style
-- Inline variables that are only used once in assertions (e.g., `expect(await findByRole('log')).toBeInTheDocument()`)
-- Don't assign queried element(s) to a variable unless used multiple times (e.g., for interaction AND assertion)
-- Hard-code test data wherever possible - use literal values directly even if they appear multiple times for explicitness
-- Don't destructure render function return values - use `const rendered = renderComponent({ pinia })` then `rendered.findByRole(...)`
-- Have exactly one blank line between test cases for consistent formatting
+- Inline queried elements unless used multiple times (e.g., `expect(await findByRole('log')).toBeInTheDocument()`)
+- Only assign to variable if used for both interaction AND assertion/verification, or multiple assertions
+- Hard-code test data - use literal values directly for explicitness
+- Don't destructure render return values - use `const rendered = renderComponent({ pinia })`
+- One blank line between test cases
+- Avoid self-evident comments - code should be readable without them (e.g., don't write `// Click button` before `await user.click(button)`)
+- Each assertion/action should fit in one line (after formatting) - adjust test data length to achieve this
 
 ## Measuring Coverage
 

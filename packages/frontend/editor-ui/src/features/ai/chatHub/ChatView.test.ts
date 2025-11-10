@@ -93,18 +93,15 @@ describe('ChatView', () => {
 		pinia = createPinia();
 		setActivePinia(pinia);
 
-		// Reset route to initial state
 		mockRoute.params = {};
 		mockRoute.query = {};
 		mockRouterPush.mockClear();
 
-		// Clear all API mocks
 		vi.mocked(chatApi.sendMessageApi).mockClear();
 		vi.mocked(chatApi.editMessageApi).mockClear();
 		vi.mocked(chatApi.regenerateMessageApi).mockClear();
 		vi.mocked(chatApi.stopGenerationApi).mockClear();
 
-		// Mock chat API with default response including common agents
 		vi.mocked(chatApi.fetchChatModelsApi).mockResolvedValue(
 			createMockModelsResponse({
 				'custom-agent': {
@@ -134,21 +131,14 @@ describe('ChatView', () => {
 		it('displays chat starter for new session, conversation header, and prompt input', async () => {
 			const rendered = renderComponent({ pinia });
 
-			// Should not display message list for new session (role="log" is only for existing conversations)
 			expect(rendered.queryByRole('log')).not.toBeInTheDocument();
-
-			// Should display chat starter greeting
 			expect(await rendered.findByText('Hello, Test!')).toBeInTheDocument();
-
-			// Should display prompt input
 			expect(await rendered.findByRole('textbox')).toBeInTheDocument();
 		});
 
 		it('displays existing conversation with messages loaded from API', async () => {
-			// Set up route with existing session ID
 			mockRoute.params = { id: 'existing-session-123' };
 
-			// Mock existing conversation with messages
 			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
 				createMockConversationResponse({
 					session: createMockSession({
@@ -183,13 +173,8 @@ describe('ChatView', () => {
 
 			const rendered = renderComponent({ pinia });
 
-			// Wait for messages to be displayed
-			expect(await rendered.findByRole('log')).toBeInTheDocument();
-
-			// Wait for the last message to appear
 			expect(await rendered.findByText('The weather is sunny today.')).toBeInTheDocument();
 
-			// Verify all messages are displayed in order
 			const messages = rendered.queryAllByTestId('chat-message');
 			expect(messages).toHaveLength(2);
 			expect(messages[0]).toHaveTextContent('What is the weather today?');
@@ -197,10 +182,8 @@ describe('ChatView', () => {
 		});
 
 		it('handles when the agent selected for the conversation is not available anymore', async () => {
-			// Set up route with existing session ID
 			mockRoute.params = { id: 'existing-session-123' };
 
-			// Mock agents response WITHOUT the agent that was used in the conversation
 			vi.mocked(chatApi.fetchChatModelsApi).mockResolvedValue(
 				createMockModelsResponse({
 					openai: {
@@ -211,11 +194,9 @@ describe('ChatView', () => {
 							}),
 						],
 					},
-					// Note: anthropic agent 'claude-3-sonnet' is NOT available
 				}),
 			);
 
-			// Mock existing conversation that used an anthropic agent that's no longer available
 			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
 				createMockConversationResponse({
 					session: createMockSession({
@@ -223,7 +204,7 @@ describe('ChatView', () => {
 						title: 'Existing Conversation',
 						lastMessageAt: new Date().toISOString(),
 						provider: 'anthropic',
-						model: 'claude-3-sonnet', // This model is not in the available agents
+						model: 'claude-3-sonnet',
 						agentId: null,
 						agentName: null,
 					}),
@@ -232,12 +213,8 @@ describe('ChatView', () => {
 
 			const rendered = renderComponent({ pinia });
 
-			// Should display the "reselect a model" message since the agent is not available
 			expect(await rendered.findByText(/reselect a model/i)).toBeInTheDocument();
-
-			// Verify the textarea is disabled when agent is not available
-			const textarea = (await rendered.findByRole('textbox')) as HTMLTextAreaElement;
-			expect(textarea).toBeDisabled();
+			expect(await rendered.findByRole('textbox')).toBeDisabled();
 		});
 	});
 
@@ -245,13 +222,10 @@ describe('ChatView', () => {
 		it('sends message in new session, calls API, navigates to conversation view, and displays user message', async () => {
 			const user = userEvent.setup();
 
-			// Set route query parameter to select the custom agent
 			mockRoute.query = { agentId: 'agent-123' };
 
-			// Mock sendMessage API to simulate streaming response
 			vi.mocked(chatApi.sendMessageApi).mockImplementation(
 				(_ctx, payload, onMessageUpdated, onDone) => {
-					// Simulate streaming synchronously
 					void Promise.resolve().then(async () => {
 						onMessageUpdated(
 							createMockStreamChunk({
@@ -293,47 +267,35 @@ describe('ChatView', () => {
 
 			const rendered = renderComponent({ pinia });
 
-			// Find the textarea
 			const textarea = (await rendered.findByRole('textbox')) as HTMLTextAreaElement;
-
-			// Type a message and press Enter
 			await user.click(textarea);
 			await user.type(textarea, 'Hello, AI!{Enter}');
 
-			// Wait for the message list to appear (indicates session is no longer "new")
-			expect(await rendered.findByRole('log')).toBeInTheDocument();
-
-			// Verify the input was cleared
 			expect(textarea.value).toBe('');
 
-			// Verify sendMessageApi was called with correct parameters
 			expect(chatApi.sendMessageApi).toHaveBeenCalledWith(
-				expect.anything(), // restApiContext
+				expect.anything(),
 				expect.objectContaining({
 					message: 'Hello, AI!',
 					model: { provider: 'custom-agent', agentId: 'agent-123' },
 					sessionId: expect.any(String),
 					credentials: {},
 				}),
-				expect.any(Function), // onStreamMessage
-				expect.any(Function), // onStreamDone
-				expect.any(Function), // onStreamError
+				expect.any(Function),
+				expect.any(Function),
+				expect.any(Function),
 			);
 
-			// Extract the session ID from the API call
 			const apiCallArgs = vi.mocked(chatApi.sendMessageApi).mock.calls[0];
 			const sessionIdFromApi = apiCallArgs[1].sessionId;
 
-			// Verify navigation to conversation view with same session ID
 			expect(mockRouterPush).toHaveBeenCalledWith({
 				name: 'chat-conversation',
 				params: { id: sessionIdFromApi },
 			});
 
-			// Wait for the last message to appear (AI response)
 			expect(await rendered.findByText('Hello! How can I help?')).toBeInTheDocument();
 
-			// Verify all messages
 			const messages = rendered.queryAllByTestId('chat-message');
 			expect(messages).toHaveLength(2);
 			expect(messages[0]).toHaveTextContent('Hello, AI!');
@@ -343,10 +305,8 @@ describe('ChatView', () => {
 		it('sends message in existing session and displays both user and AI messages', async () => {
 			const user = userEvent.setup();
 
-			// Set up route with existing session ID
 			mockRoute.params = { id: 'existing-session-123' };
 
-			// Mock existing conversation with existing messages
 			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
 				createMockConversationResponse({
 					session: createMockSession({
@@ -379,10 +339,8 @@ describe('ChatView', () => {
 				}),
 			);
 
-			// Mock sendMessage API to simulate streaming response (BEFORE component renders)
 			vi.mocked(chatApi.sendMessageApi).mockImplementation(
 				(_ctx, payload, onMessageUpdated, onDone) => {
-					// Simulate streaming synchronously
 					void Promise.resolve().then(async () => {
 						onMessageUpdated(
 							createMockStreamChunk({
@@ -424,22 +382,14 @@ describe('ChatView', () => {
 
 			const rendered = renderComponent({ pinia });
 
-			// Wait for existing messages to be displayed (component fetches automatically)
-			expect(await rendered.findByRole('log')).toBeInTheDocument();
-
-			// Find the textarea
 			const textarea = (await rendered.findByRole('textbox')) as HTMLTextAreaElement;
-
-			// Type a message and press Enter
 			await user.click(textarea);
 			await user.type(textarea, 'New question{Enter}');
 
-			// Verify the input was cleared
 			expect(textarea.value).toBe('');
 
-			// Verify sendMessageApi was called with correct parameters
 			expect(chatApi.sendMessageApi).toHaveBeenCalledWith(
-				expect.anything(), // restApiContext
+				expect.anything(),
 				expect.objectContaining({
 					message: 'New question',
 					model: { provider: 'custom-agent', agentId: 'agent-123' },
@@ -447,15 +397,13 @@ describe('ChatView', () => {
 					credentials: {},
 					previousMessageId: 'msg-2',
 				}),
-				expect.any(Function), // onStreamMessage
-				expect.any(Function), // onStreamDone
-				expect.any(Function), // onStreamError
+				expect.any(Function),
+				expect.any(Function),
+				expect.any(Function),
 			);
 
-			// Wait for the last message to appear (new AI response)
 			expect(await rendered.findByText('AI response here')).toBeInTheDocument();
 
-			// Verify all messages
 			const messages = rendered.queryAllByTestId('chat-message');
 			expect(messages).toHaveLength(4);
 			expect(messages[0]).toHaveTextContent('Previous question');
@@ -463,20 +411,16 @@ describe('ChatView', () => {
 			expect(messages[2]).toHaveTextContent('New question');
 			expect(messages[3]).toHaveTextContent('AI response here');
 
-			// Verify no navigation happens (already on conversation view)
 			expect(mockRouterPush).not.toHaveBeenCalled();
 		});
 
 		it('stops streaming when user clicks stop button and calls stopGeneration API', async () => {
 			const user = userEvent.setup();
 
-			// Set route query parameter to select the custom agent
 			mockRoute.query = { agentId: 'agent-123' };
 
-			// Mock sendMessage API to simulate streaming that we'll interrupt
 			vi.mocked(chatApi.sendMessageApi).mockImplementation(
 				(_ctx, payload, onMessageUpdated, _onDone) => {
-					// Simulate streaming synchronously
 					void Promise.resolve().then(async () => {
 						onMessageUpdated(
 							createMockStreamChunk({
@@ -499,39 +443,28 @@ describe('ChatView', () => {
 								},
 							}),
 						);
-
-						// Don't call onDone - simulate interrupted streaming
 					});
 				},
 			);
 
-			// Mock stopGeneration API
 			vi.mocked(chatApi.stopGenerationApi).mockResolvedValue(undefined);
 
 			const rendered = renderComponent({ pinia });
 
-			// Find the textarea
 			const textarea = (await rendered.findByRole('textbox')) as HTMLTextAreaElement;
-
-			// Type a message and press Enter
 			await user.click(textarea);
 			await user.type(textarea, 'Hello, AI!{Enter}');
 
-			// Wait for the stop button to appear and click it
 			await user.click(await rendered.findByRole('button', { name: /stop generating/i }));
 
-			// Extract the session ID from the sendMessage call
 			const sendApiCall = vi.mocked(chatApi.sendMessageApi).mock.calls[0];
 			const sessionId = sendApiCall[1].sessionId;
 
-			// Verify stopGenerationApi was called with correct parameters
-			await waitFor(() => {
-				expect(chatApi.stopGenerationApi).toHaveBeenCalledWith(
-					expect.anything(), // restApiContext
-					sessionId,
-					'ai-message-123', // AI message ID being stopped
-				);
-			});
+			expect(chatApi.stopGenerationApi).toHaveBeenCalledWith(
+				expect.anything(),
+				sessionId,
+				'ai-message-123',
+			);
 		});
 	});
 
@@ -544,10 +477,8 @@ describe('ChatView', () => {
 		it('regenerates AI response when user clicks regenerate button', async () => {
 			const user = userEvent.setup();
 
-			// Set up route with existing session ID
 			mockRoute.params = { id: 'existing-session-123' };
 
-			// Mock existing conversation with AI message
 			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
 				createMockConversationResponse({
 					session: createMockSession({
@@ -578,7 +509,6 @@ describe('ChatView', () => {
 				}),
 			);
 
-			// Mock regenerateMessage API
 			vi.mocked(chatApi.regenerateMessageApi).mockImplementation(
 				(_ctx, _sessionId, _retryId, _payload, onMessageUpdated, onDone) => {
 					void Promise.resolve().then(async () => {
@@ -597,7 +527,7 @@ describe('ChatView', () => {
 						onMessageUpdated(
 							createMockStreamChunk({
 								type: 'item',
-								content: 'Regenerated response: Two plus two equals four.',
+								content: 'Regenerated: 2+2=4',
 								metadata: {
 									messageId: 'ai-message-retry-123',
 									retryOfMessageId: 'msg-2',
@@ -625,45 +555,31 @@ describe('ChatView', () => {
 
 			const rendered = renderComponent({ pinia });
 
-			// Wait for existing messages to be displayed
-			expect(await rendered.findByRole('log')).toBeInTheDocument();
-
-			// Wait for the original message to appear first
 			expect(await rendered.findByText('Original response: 4')).toBeInTheDocument();
 
-			// Find the regenerate button by its accessible label
-			const regenerateButton = await rendered.findByRole('button', { name: 'Regenerate' });
-			await user.click(regenerateButton);
+			await user.click(await rendered.findByRole('button', { name: 'Regenerate' }));
 
-			// Verify regenerateMessageApi was called with correct parameters
-			await waitFor(() => {
-				expect(chatApi.regenerateMessageApi).toHaveBeenCalledWith(
-					expect.anything(), // restApiContext
-					'existing-session-123', // sessionId
-					'msg-2', // retryId (the AI message ID to retry)
-					expect.objectContaining({
-						model: { provider: 'custom-agent', agentId: 'agent-123' },
-						credentials: {},
-					}),
-					expect.any(Function), // onStreamMessage
-					expect.any(Function), // onStreamDone
-					expect.any(Function), // onStreamError
-				);
-			});
+			expect(await rendered.findByText('Regenerated: 2+2=4')).toBeInTheDocument();
 
-			// Wait for the regenerated response to appear
-			expect(
-				await rendered.findByText('Regenerated response: Two plus two equals four.'),
-			).toBeInTheDocument();
+			expect(chatApi.regenerateMessageApi).toHaveBeenCalledWith(
+				expect.anything(),
+				'existing-session-123',
+				'msg-2',
+				expect.objectContaining({
+					model: { provider: 'custom-agent', agentId: 'agent-123' },
+					credentials: {},
+				}),
+				expect.any(Function),
+				expect.any(Function),
+				expect.any(Function),
+			);
 		});
 
 		it('edits message and regenerates response when user edits their message', async () => {
 			const user = userEvent.setup();
 
-			// Set up route with existing session ID
 			mockRoute.params = { id: 'existing-session-123' };
 
-			// Mock existing conversation with user and AI message
 			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
 				createMockConversationResponse({
 					session: createMockSession({
@@ -694,7 +610,6 @@ describe('ChatView', () => {
 				}),
 			);
 
-			// Mock editMessage API
 			vi.mocked(chatApi.editMessageApi).mockImplementation(
 				(_ctx, _sessionId, _editId, _payload, onMessageUpdated, onDone) => {
 					void Promise.resolve().then(async () => {
@@ -712,7 +627,7 @@ describe('ChatView', () => {
 						onMessageUpdated(
 							createMockStreamChunk({
 								type: 'item',
-								content: 'Updated answer based on edited question',
+								content: 'Updated answer',
 								metadata: {
 									messageId: 'ai-message-edit-123',
 									previousMessageId: 'msg-1',
@@ -738,62 +653,42 @@ describe('ChatView', () => {
 
 			const rendered = renderComponent({ pinia });
 
-			// Wait for existing messages to be displayed
-			expect(await rendered.findByRole('log')).toBeInTheDocument();
-
-			// Wait for messages to appear
 			expect(await rendered.findByText('Original answer')).toBeInTheDocument();
 
-			// Find all messages and get the first one (user message)
 			const messages = rendered.queryAllByTestId('chat-message');
 			const userMessage = messages[0];
 
-			// Click the edit button within the user message
-			const editButton = await within(userMessage).findByRole('button', { name: 'Edit' });
-			await user.click(editButton);
+			await user.click(await within(userMessage).findByRole('button', { name: 'Edit' }));
 
-			// Find the textarea within the user message that's now in edit mode
 			const textarea = (await within(userMessage).findByRole('textbox')) as HTMLTextAreaElement;
-
-			// Clear and type edited message
 			await user.clear(textarea);
 			await user.type(textarea, 'Edited question');
 
-			// Click the Send button within the user message
-			const sendButton = await within(userMessage).findByRole('button', { name: 'Send' });
-			await user.click(sendButton);
+			await user.click(await within(userMessage).findByRole('button', { name: 'Send' }));
 
-			// Verify editMessageApi was called with correct parameters
-			await waitFor(() => {
-				expect(chatApi.editMessageApi).toHaveBeenCalledWith(
-					expect.anything(), // restApiContext
-					'existing-session-123', // sessionId
-					'msg-1', // editId (the original user message ID being edited)
-					expect.objectContaining({
-						messageId: expect.any(String), // promptId (new UUID for the revision)
-						message: 'Edited question',
-						model: { provider: 'custom-agent', agentId: 'agent-123' },
-						credentials: {},
-					}),
-					expect.any(Function), // onStreamMessage
-					expect.any(Function), // onStreamDone
-					expect.any(Function), // onStreamError
-				);
-			});
+			expect(await rendered.findByText('Updated answer')).toBeInTheDocument();
 
-			// Wait for the edited response to appear
-			expect(
-				await rendered.findByText('Updated answer based on edited question'),
-			).toBeInTheDocument();
+			expect(chatApi.editMessageApi).toHaveBeenCalledWith(
+				expect.anything(),
+				'existing-session-123',
+				'msg-1',
+				expect.objectContaining({
+					messageId: expect.any(String),
+					message: 'Edited question',
+					model: { provider: 'custom-agent', agentId: 'agent-123' },
+					credentials: {},
+				}),
+				expect.any(Function),
+				expect.any(Function),
+				expect.any(Function),
+			);
 		});
 
 		it('switches to alternative response when user selects alternative', async () => {
 			const user = userEvent.setup();
 
-			// Set up route with existing session ID
 			mockRoute.params = { id: 'existing-session-123' };
 
-			// Mock existing conversation with message that has alternatives (retry)
 			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
 				createMockConversationResponse({
 					session: createMockSession({
@@ -814,18 +709,17 @@ describe('ChatView', () => {
 								sessionId: 'existing-session-123',
 								type: 'ai',
 								name: 'Assistant',
-								content: 'First response about AI',
+								content: 'First AI response',
 								provider: 'custom-agent',
 								agentId: 'agent-123',
 								previousMessageId: 'msg-1',
 							}),
-							// Alternative response (retry)
 							'msg-2-retry': createMockMessageDto({
 								id: 'msg-2-retry',
 								sessionId: 'existing-session-123',
 								type: 'ai',
 								name: 'Assistant',
-								content: 'Second response about AI (regenerated)',
+								content: 'Second AI response',
 								provider: 'custom-agent',
 								agentId: 'agent-123',
 								previousMessageId: 'msg-1',
@@ -838,31 +732,14 @@ describe('ChatView', () => {
 
 			const rendered = renderComponent({ pinia });
 
-			// Wait for messages to be displayed
-			expect(await rendered.findByRole('log')).toBeInTheDocument();
-
-			// Initially, the latest alternative (msg-2-retry) should be shown
-			expect(
-				await rendered.findByText('Second response about AI (regenerated)'),
-			).toBeInTheDocument();
-
-			// The alternative counter should show "2/2" (second of two alternatives)
+			expect(await rendered.findByText('Second AI response')).toBeInTheDocument();
 			expect(await rendered.findByText('2/2')).toBeInTheDocument();
 
-			// Find the previous alternative button by its accessible label
-			const prevButton = await rendered.findByRole('button', { name: 'Previous alternative' });
-			await user.click(prevButton);
+			await user.click(await rendered.findByRole('button', { name: 'Previous alternative' }));
 
-			// Now the first response should be displayed
-			expect(await rendered.findByText('First response about AI')).toBeInTheDocument();
-
-			// The counter should now show "1/2"
+			expect(await rendered.findByText('First AI response')).toBeInTheDocument();
 			expect(await rendered.findByText('1/2')).toBeInTheDocument();
-
-			// The second response should not be in the document anymore
-			expect(
-				rendered.queryByText('Second response about AI (regenerated)'),
-			).not.toBeInTheDocument();
+			expect(rendered.queryByText('Second AI response')).not.toBeInTheDocument();
 		});
 	});
 });
