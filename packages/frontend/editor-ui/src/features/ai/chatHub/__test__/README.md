@@ -46,9 +46,20 @@ Your mission is to bring code coverage under the chatHub folder to above 95%.
 	- What is displayed in UI
 	- API requests for mutations (create, update, etc.)
 - Do NOT assert:
-	- Store state directly (e.g., `chatStore.getActiveMessages()`)
+	- Store state directly (e.g., `chatStore.getActiveMessages()`, `chatStore.sessionsReady`)
 	- Function calls using `toHaveBeenCalled`
+	- Store state inside `waitFor` to wait for readiness
 - Always verify through the UI, not internal state
+- Wait for UI changes, not store state changes:
+	```typescript
+	// Bad - waiting for store state
+	await vi.waitFor(() => {
+		expect(chatStore.sessionsReady).toBe(true);
+	});
+
+	// Good - wait for UI element that indicates readiness
+	await rendered.findByText('Session Title');
+	```
 
 ### Waiting and timing
 - Always wait for UI cues (e.g., `await findByRole()`, `await findByText()`)
@@ -59,6 +70,16 @@ Your mission is to bring code coverage under the chatHub folder to above 95%.
 ### Variables and code style
 - Inline queried elements unless used multiple times (e.g., `expect(await findByRole('log')).toBeInTheDocument()`)
 - Only assign to variable if used for both interaction AND assertion/verification, or multiple assertions
+- Inline user interactions with queries when possible:
+	```typescript
+	// Good - inline query with interaction
+	await user.click(await rendered.findByText('Submit'));
+	await user.hover(await rendered.findByText('Menu Item'));
+
+	// Avoid - unnecessary variable assignment
+	const submitButton = await rendered.findByText('Submit');
+	await user.click(submitButton);
+	```
 - Hard-code test data - use literal values directly for explicitness
 - Don't destructure render return values - use `const rendered = renderComponent({ pinia })`
 - One blank line between test cases

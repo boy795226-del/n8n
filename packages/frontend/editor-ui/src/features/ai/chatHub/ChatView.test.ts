@@ -14,18 +14,6 @@ import * as chatApi from './chat.api';
 import userEvent from '@testing-library/user-event';
 import { within } from '@testing-library/vue';
 
-/**
- * ChatView.vue Tests
- *
- * Main chat interface where users interact with AI agents
- * Key features:
- * - Display chat messages
- * - Send new messages
- * - Handle streaming responses
- * - Model selection
- * - Session management
- */
-
 // Mock external stores and modules
 vi.mock('@/features/settings/users/users.store', () => ({
 	useUsersStore: () => ({
@@ -101,6 +89,7 @@ describe('ChatView', () => {
 		mockRoute.params = {};
 		mockRoute.query = {};
 		mockRouterPush.mockClear();
+		localStorage.clear();
 
 		vi.mocked(chatApi.sendMessageApi).mockClear();
 		vi.mocked(chatApi.sendMessageApi).mockImplementation((_ctx, _, onMessageUpdated_, onDone_) => {
@@ -132,6 +121,46 @@ describe('ChatView', () => {
 							description: 'A test custom agent',
 							model: { provider: 'custom-agent', agentId: 'agent-123' },
 						}),
+						createMockAgent({
+							name: 'My Custom Agent',
+							model: { provider: 'custom-agent', agentId: 'agent-456' },
+						}),
+						createMockAgent({
+							name: 'Another Custom Agent',
+							model: { provider: 'custom-agent', agentId: 'agent-789' },
+						}),
+					],
+				},
+				n8n: {
+					models: [
+						createMockAgent({
+							name: 'My Workflow Agent',
+							model: { provider: 'n8n', workflowId: 'workflow-789' },
+						}),
+						createMockAgent({
+							name: 'Another Workflow Agent',
+							model: { provider: 'n8n', workflowId: 'workflow-999' },
+						}),
+					],
+				},
+				openai: {
+					models: [
+						createMockAgent({
+							name: 'GPT-4',
+							model: { provider: 'openai', model: 'gpt-4' },
+						}),
+						createMockAgent({
+							name: 'GPT-3.5',
+							model: { provider: 'openai', model: 'gpt-3.5-turbo' },
+						}),
+					],
+				},
+				anthropic: {
+					models: [
+						createMockAgent({
+							name: 'Claude 3',
+							model: { provider: 'anthropic', model: 'claude-3' },
+						}),
 					],
 				},
 			}),
@@ -149,8 +178,8 @@ describe('ChatView', () => {
 		vi.mocked(chatApi.updateConversationApi).mockClear();
 	});
 
-	describe('Initial rendering', () => {
-		it('displays chat starter for new session, conversation header, and prompt input', async () => {
+	describe('Rendering new session', () => {
+		it('displays chat starter, conversation header, and prompt input', async () => {
 			const rendered = renderComponent({ pinia });
 
 			expect(rendered.queryByRole('log')).not.toBeInTheDocument();
@@ -158,7 +187,77 @@ describe('ChatView', () => {
 			expect(await rendered.findByRole('textbox')).toBeInTheDocument();
 		});
 
-		it('displays existing conversation with messages loaded from API', async () => {
+		it('preselects agent from agentId query parameter', async () => {
+			mockRoute.query = { agentId: 'agent-456' };
+
+			const rendered = renderComponent({ pinia });
+
+			expect(await rendered.findByRole('button', { name: /My Custom Agent/i })).toBeInTheDocument();
+		});
+
+		it('preselects agent from workflowId query parameter', async () => {
+			mockRoute.query = { workflowId: 'workflow-789' };
+
+			const rendered = renderComponent({ pinia });
+
+			expect(
+				await rendered.findByRole('button', { name: /My Workflow Agent/i }),
+			).toBeInTheDocument();
+		});
+
+		it('preselects agent from localStorage', async () => {
+			localStorage.setItem(
+				'user-123_N8N_CHAT_HUB_SELECTED_MODEL',
+				JSON.stringify({ provider: 'openai', model: 'gpt-4' }),
+			);
+
+			const rendered = renderComponent({ pinia });
+
+			expect(await rendered.findByRole('button', { name: /GPT-4/i })).toBeInTheDocument();
+		});
+
+		it('preselects first available agent when no preference exists', async () => {
+			vi.mocked(chatApi.fetchChatModelsApi).mockResolvedValue(
+				createMockModelsResponse({
+					openai: {
+						models: [
+							createMockAgent({
+								name: 'GPT-4',
+								model: { provider: 'openai', model: 'gpt-4' },
+							}),
+						],
+					},
+					anthropic: {
+						models: [
+							createMockAgent({
+								name: 'Claude 3',
+								model: { provider: 'anthropic', model: 'claude-3' },
+							}),
+						],
+					},
+				}),
+			);
+
+			const rendered = renderComponent({ pinia });
+
+			expect(await rendered.findByRole('button', { name: /GPT-4/i })).toBeInTheDocument();
+		});
+
+		it('disables prompt when no agents are available', async () => {
+			vi.mocked(chatApi.fetchChatModelsApi).mockResolvedValue(
+				createMockModelsResponse({
+					openai: { models: [] },
+				}),
+			);
+
+			const rendered = renderComponent({ pinia });
+
+			expect(await rendered.findByRole('textbox')).toBeDisabled();
+		});
+	});
+
+	describe('Rendering existing session', () => {
+		beforeEach(() => {
 			mockRoute.params = { id: 'existing-session-123' };
 
 			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
@@ -169,7 +268,6 @@ describe('ChatView', () => {
 						lastMessageAt: new Date().toISOString(),
 						provider: 'custom-agent',
 						agentId: 'agent-123',
-						agentName: 'Test Custom Agent',
 					}),
 					conversation: {
 						messages: {
@@ -192,7 +290,9 @@ describe('ChatView', () => {
 					},
 				}),
 			);
+		});
 
+		it('displays conversation with messages loaded from API', async () => {
 			const rendered = renderComponent({ pinia });
 
 			expect(await rendered.findByText('The weather is sunny today.')).toBeInTheDocument();
@@ -203,9 +303,21 @@ describe('ChatView', () => {
 			expect(messages[1]).toHaveTextContent('The weather is sunny today.');
 		});
 
-		it('handles when the agent selected for the conversation is not available anymore', async () => {
-			mockRoute.params = { id: 'existing-session-123' };
+		it('displays error toast and redirects to chat view when fetching conversation fails', async () => {
+			vi.mocked(chatApi.fetchSingleConversationApi).mockRejectedValue(
+				new Error('Conversation not found'),
+			);
 
+			const rendered = renderComponent({ pinia });
+
+			expect(await rendered.findByText(/Error fetching a conversation/i)).toBeInTheDocument();
+
+			await vi.waitFor(() => {
+				expect(mockRouterPush).toHaveBeenCalledWith({ name: 'chat' });
+			});
+		});
+
+		it('handles when the agent selected for the conversation is not available anymore', async () => {
 			vi.mocked(chatApi.fetchChatModelsApi).mockResolvedValue(
 				createMockModelsResponse({
 					openai: {
@@ -216,20 +328,6 @@ describe('ChatView', () => {
 							}),
 						],
 					},
-				}),
-			);
-
-			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
-				createMockConversationResponse({
-					session: createMockSession({
-						id: 'existing-session-123',
-						title: 'Existing Conversation',
-						lastMessageAt: new Date().toISOString(),
-						provider: 'anthropic',
-						model: 'claude-3-sonnet',
-						agentId: null,
-						agentName: null,
-					}),
 				}),
 			);
 
@@ -360,7 +458,6 @@ describe('ChatView', () => {
 						lastMessageAt: new Date().toISOString(),
 						provider: 'custom-agent',
 						agentId: 'agent-123',
-						agentName: 'Test Custom Agent',
 					}),
 					conversation: {
 						messages: {
@@ -505,7 +602,7 @@ describe('ChatView', () => {
 		});
 	});
 
-	describe('Model selection', () => {
+	describe('Conversation actions', () => {
 		it('updates session model when user selects different model in existing conversation', async () => {
 			const user = userEvent.setup();
 
@@ -538,7 +635,6 @@ describe('ChatView', () => {
 						id: 'existing-session-123',
 						provider: 'custom-agent',
 						agentId: 'agent-1',
-						agentName: 'Custom Agent 1',
 					}),
 				}),
 			);
@@ -603,12 +699,15 @@ describe('ChatView', () => {
 				JSON.stringify({ provider: 'anthropic', model: 'claude-3' }),
 			);
 		});
+
+		it.todo('opens agent editor modal with agent data when editing custom agent');
+		it.todo('opens agent editor modal with empty form when creating new agent');
+		it.todo('updates selected model when new agent is created from editor');
+		it.todo('opens workflow in new tab when user clicks open workflow button');
 	});
 
 	describe('Message actions', () => {
-		it('regenerates AI response when user clicks regenerate button', async () => {
-			const user = userEvent.setup();
-
+		beforeEach(() => {
 			mockRoute.params = { id: 'existing-session-123' };
 
 			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
@@ -617,7 +716,39 @@ describe('ChatView', () => {
 						id: 'existing-session-123',
 						provider: 'custom-agent',
 						agentId: 'agent-123',
-						agentName: 'Test Custom Agent',
+					}),
+					conversation: {
+						messages: {
+							'msg-1': createMockMessageDto({
+								id: 'msg-1',
+								sessionId: 'existing-session-123',
+								content: 'Test question',
+							}),
+							'msg-2': createMockMessageDto({
+								id: 'msg-2',
+								sessionId: 'existing-session-123',
+								type: 'ai',
+								name: 'Assistant',
+								content: 'Test answer',
+								provider: 'custom-agent',
+								agentId: 'agent-123',
+								previousMessageId: 'msg-1',
+							}),
+						},
+					},
+				}),
+			);
+		});
+
+		it('regenerates AI response when user clicks regenerate button', async () => {
+			const user = userEvent.setup();
+
+			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
+				createMockConversationResponse({
+					session: createMockSession({
+						id: 'existing-session-123',
+						provider: 'custom-agent',
+						agentId: 'agent-123',
 					}),
 					conversation: {
 						messages: {
@@ -704,15 +835,12 @@ describe('ChatView', () => {
 		it('edits message and regenerates response when user edits their message', async () => {
 			const user = userEvent.setup();
 
-			mockRoute.params = { id: 'existing-session-123' };
-
 			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
 				createMockConversationResponse({
 					session: createMockSession({
 						id: 'existing-session-123',
 						provider: 'custom-agent',
 						agentId: 'agent-123',
-						agentName: 'Test Custom Agent',
 					}),
 					conversation: {
 						messages: {
@@ -807,15 +935,12 @@ describe('ChatView', () => {
 		it('switches to alternative response when user selects alternative', async () => {
 			const user = userEvent.setup();
 
-			mockRoute.params = { id: 'existing-session-123' };
-
 			vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue(
 				createMockConversationResponse({
 					session: createMockSession({
 						id: 'existing-session-123',
 						provider: 'custom-agent',
 						agentId: 'agent-123',
-						agentName: 'Test Custom Agent',
 					}),
 					conversation: {
 						messages: {

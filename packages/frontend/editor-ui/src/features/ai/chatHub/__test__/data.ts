@@ -6,6 +6,7 @@ import type {
 	ChatHubConversationResponse,
 	EnrichedStructuredChunk,
 } from '@n8n/api-types';
+import { emptyChatModelsResponse } from '@n8n/api-types';
 import type { ChatMessage } from '../chat.types';
 
 export const createMockAgent = (overrides: Partial<ChatModelDto> = {}): ChatModelDto => ({
@@ -20,6 +21,7 @@ export const createMockAgent = (overrides: Partial<ChatModelDto> = {}): ChatMode
 export const createMockModelsResponse = (
 	overrides: Partial<ChatModelsResponse> = {},
 ): ChatModelsResponse => ({
+	...emptyChatModelsResponse,
 	openai: {
 		models: [
 			createMockAgent({
@@ -28,10 +30,6 @@ export const createMockModelsResponse = (
 			}),
 		],
 	},
-	anthropic: { models: [] },
-	google: { models: [] },
-	'custom-agent': { models: [] },
-	n8n: { models: [] },
 	...overrides,
 });
 

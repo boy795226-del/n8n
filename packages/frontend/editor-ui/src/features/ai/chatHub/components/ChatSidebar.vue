@@ -14,6 +14,8 @@ const isMobileDevice = useMediaQuery(MOBILE_MEDIA_QUERY);
 const route = useRoute();
 const sidebar = useChatHubSidebarState();
 
+console.log(4444, useRoute, route);
+
 watch(
 	() => route.fullPath,
 	() => uiStore.closeModal(CHAT_HUB_SIDE_MENU_DRAWER_MODAL_KEY),
