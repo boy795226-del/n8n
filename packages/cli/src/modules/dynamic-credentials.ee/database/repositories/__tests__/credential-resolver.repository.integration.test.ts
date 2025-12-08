@@ -76,8 +76,8 @@ describe('DynamicCredentialResolverRepository', () => {
 			const linked = await credentialsRepository.find({ where: { resolverId: resolver.id } });
 
 			expect(linked).toHaveLength(2);
-			expect(linked[0].resolverId).toBe(resolver.id);
-			expect(linked[1].resolvableAllowFallback).toBe(true);
+			expect(linked.every((cred) => cred.resolverId === resolver.id)).toBe(true);
+			expect(linked.some((cred) => cred.resolvableAllowFallback)).toBe(true);
 		});
 
 		it('should handle nullable resolverId', async () => {
