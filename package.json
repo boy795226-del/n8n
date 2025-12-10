@@ -51,9 +51,9 @@
     "webhook": "./packages/cli/bin/n8n webhook",
     "worker": "./packages/cli/bin/n8n worker"
   },
-  "devDependencies": {
-  "@n8n/eslint-config": "^1.0.0"
-    "@types/jest": "^29.5.3",
+"devDependencies": {
+  "@n8n/eslint-config": "^1.0.0",
+  "@types/jest": "^29.5.3"
     "@types/node": "*",
     "@types/supertest": "^6.0.3",
     "babel-plugin-transform-import-meta": "^2.3.2",
